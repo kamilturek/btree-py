@@ -68,18 +68,18 @@ class Node(BaseNode):
 
             middle = (self.order - 1) // 2
 
-            for i in range(middle + 1):
-                sibling.keys[i] = tmp_keys[middle + i]
+            # Copy second half of the node
+            sibling.keys[: middle + 1] = tmp_keys[middle:]
+            sibling.children[: middle + 2] = tmp_children[middle:]
 
-            for i in range(middle + 2):
-                sibling.children[i] = tmp_children[middle + i]
-
+            # Erase second half of the node
             for i in range(middle):
                 self.keys[middle + i] = None
 
             for i in range(middle + 1):
                 self.children[middle + i] = None
 
+            # Return new parent if created
             return (
                 self.parent.insert(sibling.keys[0], sibling)
                 or self.parent.insert(self.keys[middle - 1], self)
@@ -144,14 +144,16 @@ class Leaf(BaseNode):
 
             middle = (self.order - 1) // 2
 
-            for i in range(middle + 1):
-                self.sibling.keys[i] = tmp_keys[middle + i]
-                self.sibling.values[i] = tmp_values[middle + i]
+            # Move second half of the node
+            self.sibling.keys[: middle + 1] = tmp_keys[middle:]
+            self.sibling.values[: middle + 1] = tmp_values[middle:]
 
+            # Erase second half of the node
             for i in range(middle):
                 self.keys[middle + i] = None
                 self.values[middle + i] = None
 
+            # Return new parent if created
             return (
                 self.parent.insert(self.sibling.keys[0], self.sibling)
                 or self.parent.insert(self.keys[middle - 1], self)
