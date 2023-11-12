@@ -40,7 +40,7 @@ class TestLeaf(unittest.TestCase):
 
 
 class TestBTree(unittest.TestCase):
-    def test_insert(self):
+    def test_insert_and_split(self):
         btree = BTree()
 
         btree.insert(1, "1")
@@ -91,6 +91,31 @@ class TestBTree(unittest.TestCase):
         assert node21.keys == [2, None]
         assert node22.keys == [3, None]
         assert node23.keys == [4, 5]
+
+    def test_delete_and_merge(self):
+        btree = BTree()
+        btree.insert(15, "15")
+        btree.insert(16, "16")
+        btree.insert(20, "20")
+        btree.insert(25, "25")
+
+        assert btree.root.keys == [16, 20]
+
+        leaf1, leaf2, leaf3 = btree.root.children
+
+        assert leaf1.keys == [15, None]
+        assert leaf2.keys == [16, None]
+        assert leaf3.keys == [20, 25]
+
+        btree.delete(16)
+
+        assert btree.root.keys == [16, None]
+
+        leaf1, leaf2, leaf3 = btree.root.children
+
+        assert leaf1.keys == [15, None]
+        assert leaf2.keys == [20, 25]
+        assert leaf3 is None
 
 
 if __name__ == "__main__":

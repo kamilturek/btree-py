@@ -6,16 +6,22 @@ class BaseNode:
         self,
         order,
         parent=None,
+        sibling=None,
     ) -> None:
         if order < 2:
             raise ValueError("order must greater than or equal 2")
 
         self.order = order
         self.parent = parent
+        self.sibling = sibling
 
     @property
-    def max_size(self) -> int:
+    def max_size(self):
         return self.order - 1
+
+    @property
+    def keys_occupancy(self):
+        return sum(k is not None for k in self.keys)
 
 
 class Node(BaseNode):
@@ -25,15 +31,26 @@ class Node(BaseNode):
         self,
         order=DEFAULT_ORDER,
         parent=None,
+        sibling=None,
     ):
-        super().__init__(order=order, parent=parent)
+        super().__init__(order=order, parent=parent, sibling=sibling)
 
         self.keys = [None] * (order - 1)
         self.children = [None] * order
 
-    def insert(self, key, child):
+    @property
+    def keys_occupancy(self):
+        return sum(k is not None for k in self.keys)
+
+    @property
+    def children_occupancy(self):
+        return sum(c is not None for c in self.children)
+
+    def _insert(self, key, child):
         """
         Insert child to internal node or non-leaf root. Split node if necessary.
+
+        Should not be used directly.
 
         Returns:
             Node | None: new parent or None if parent not changed
@@ -61,16 +78,17 @@ class Node(BaseNode):
                 self.parent = Node(parent=None, order=self.order)
                 new_parent = self.parent
 
-            sibling = Node(
+            self.sibling = Node(
                 order=self.order,
                 parent=self.parent,
+                sibling=self.sibling,
             )
 
             middle = (self.order - 1) // 2
 
             # Copy second half of the node
-            sibling.keys[: middle + 1] = tmp_keys[middle:]
-            sibling.children[: middle + 2] = tmp_children[middle:]
+            self.sibling.keys[: middle + 1] = tmp_keys[middle:]
+            self.sibling.children[: middle + 2] = tmp_children[middle:]
 
             # Erase second half of the node
             for i in range(middle):
@@ -81,8 +99,8 @@ class Node(BaseNode):
 
             # Return new parent if created
             return (
-                self.parent.insert(sibling.keys[0], sibling)
-                or self.parent.insert(self.keys[middle - 1], self)
+                self.parent._insert(self.sibling.keys[0], self.sibling)
+                or self.parent._insert(self.keys[middle - 1], self)
                 or new_parent
             )
         else:
@@ -90,6 +108,43 @@ class Node(BaseNode):
             self.children = tmp_children[: self.max_size + 1]
 
             return None
+
+    def _delete(self, key):
+        """
+        Delete key and child following it. Merge with sibling if possible.
+
+        Should not be used directly.
+        """
+        for i, k in enumerate(self.keys):
+            if key == k:
+                is_last_key = i + 1 == len(self.keys) or self.keys[i + 1] is None
+                assert is_last_key, "Only last key from internal node can be deleted"
+
+                self.keys[i] = None
+                self.children[i + 1] = None
+                break
+
+        # Haven't tested it properly.
+        has_sibling = self.sibling is not None
+        if has_sibling:
+            keys_occupancy = self.keys_occupancy
+            sibling_keys_occupancy = self.sibling.keys_occupancy
+
+            children_occupancy = self.children_occupancy
+            sibling_children_occupancy = self.children_occupancy
+
+            can_merge = (
+                keys_occupancy + sibling_keys_occupancy <= self.max_size
+                and children_occupancy + sibling_children_occupancy <= self.max_size + 1
+            )
+            if can_merge:
+                self.keys[keys_occupancy:sibling_keys_occupancy] = self.sibling.keys[
+                    :sibling_keys_occupancy
+                ]
+                self.children[
+                    children_occupancy:sibling_children_occupancy
+                ] = self.sibling.children[:sibling_children_occupancy]
+                self.parent._delete(self.sibling.keys[0])
 
 
 class Leaf(BaseNode):
@@ -104,6 +159,10 @@ class Leaf(BaseNode):
         self.sibling = sibling
         self.keys = [None] * (order - 1)
         self.values = [None] * (order - 1)
+
+    def __repr__(self):
+        content = [f"{k}/{v}" for k, v in zip(self.keys, self.values)]
+        return f"[{', '.join(content)}]"
 
     def insert(self, key, value):
         """
@@ -155,8 +214,8 @@ class Leaf(BaseNode):
 
             # Return new parent if created
             return (
-                self.parent.insert(self.sibling.keys[0], self.sibling)
-                or self.parent.insert(self.keys[middle - 1], self)
+                self.parent._insert(self.sibling.keys[0], self.sibling)
+                or self.parent._insert(self.keys[middle - 1], self)
                 or new_parent
             )
         else:
@@ -165,19 +224,39 @@ class Leaf(BaseNode):
 
             return None
 
+    def delete(self, key):
+        for i, k in enumerate(self.keys):
+            if k == key:
+                # Shift and delete
+                self.keys[i:] = self.keys[i + 1 :]
+                self.values[i:] = self.values[i + 1 :]
+                self.keys[-1] = None
+                self.values[-1] = None
+                break
+
+        # Only right sibling is considered.
+        # Merge could probably happen with left sibling too.
+        has_sibling = self.sibling is not None
+        if has_sibling:
+            occupancy = self.keys_occupancy
+            sibling_occupancy = self.sibling.keys_occupancy
+
+            can_merge = occupancy + sibling_occupancy <= self.max_size
+            if can_merge:
+                self.keys[occupancy:sibling_occupancy] = self.sibling.keys[
+                    :sibling_occupancy
+                ]
+                self.values[occupancy:sibling_occupancy] = self.sibling.values[
+                    :sibling_occupancy
+                ]
+                self.parent._delete(self.sibling.keys[0])
+
 
 class BTree:
     def __init__(self):
         self.root = Leaf()
 
-    def insert(self, key, value):
-        leaf = self._find_leaf_for(key)
-
-        new_root = leaf.insert(key, value)
-        if new_root is not None:
-            self.root = new_root
-
-    def _find_leaf_for(self, key):
+    def _target_leaf(self, key):
         node = self.root
 
         while not isinstance(node, Leaf):
@@ -188,3 +267,14 @@ class BTree:
                     break
 
         return node
+
+    def insert(self, key, value):
+        leaf = self._target_leaf(key)
+
+        new_root = leaf.insert(key, value)
+        if new_root is not None:
+            self.root = new_root
+
+    def delete(self, key):
+        leaf = self._target_leaf(key)
+        leaf.delete(key)
