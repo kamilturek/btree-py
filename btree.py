@@ -42,10 +42,6 @@ class Node(BaseNode):
         return f"Internal: [{', '.join(str(k) for k in self.keys)}]"
 
     @property
-    def keys_occupancy(self):
-        return sum(k is not None for k in self.keys)
-
-    @property
     def children_occupancy(self):
         return sum(c is not None for c in self.children)
 
