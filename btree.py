@@ -38,6 +38,9 @@ class Node(BaseNode):
         self.keys = [None] * (order - 1)
         self.children = [None] * order
 
+    def __repr__(self):
+        return f"Internal: [{', '.join(str(k) for k in self.keys)}]"
+
     @property
     def keys_occupancy(self):
         return sum(k is not None for k in self.keys)
@@ -89,6 +92,13 @@ class Node(BaseNode):
             # Copy second half of the node
             self.sibling.keys[: middle + 1] = tmp_keys[middle:]
             self.sibling.children[: middle + 2] = tmp_children[middle:]
+
+            # Haven't tested it properly.
+            self.keys[:middle] = tmp_keys[:middle]
+            self.children[:middle] = tmp_children[:middle]
+
+            for child in self.sibling.children:
+                child.parent = self.sibling
 
             # Erase second half of the node
             for i in range(middle):
@@ -206,6 +216,8 @@ class Leaf(BaseNode):
             # Move second half of the node
             self.sibling.keys[: middle + 1] = tmp_keys[middle:]
             self.sibling.values[: middle + 1] = tmp_values[middle:]
+            self.keys[:middle] = tmp_keys[:middle]
+            self.values[:middle] = tmp_values[:middle]
 
             # Erase second half of the node
             for i in range(middle):
@@ -278,3 +290,12 @@ class BTree:
     def delete(self, key):
         leaf = self._target_leaf(key)
         leaf.delete(key)
+
+    def lookup(self, key):
+        leaf = self._target_leaf(key)
+
+        for k, v in zip(leaf.keys, leaf.values):
+            if k == key:
+                return v
+
+        raise KeyError(key)
